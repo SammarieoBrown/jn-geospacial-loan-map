@@ -1,0 +1,2183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JN Bank Loan Portfolio - Interactive Report</title>
+    <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Dark theme (default) */
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-card: rgba(30, 41, 59, 0.6);
+            --bg-dropdown: #0f172a;
+            --text-primary: #f8fafc;
+            --text-secondary: #e2e8f0;
+            --text-muted: #94a3b8;
+            --text-label: #64748b;
+            --border-color: #334155;
+            --border-hover: #475569;
+            --accent-blue: #38bdf8;
+            --accent-green: #4ade80;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="light"] {
+            /* Light theme */
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #e2e8f0;
+            --bg-card: rgba(241, 245, 249, 0.9);
+            --bg-dropdown: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #1e293b;
+            --text-muted: #475569;
+            --text-label: #64748b;
+            --border-color: #cbd5e1;
+            --border-hover: #94a3b8;
+            --accent-blue: #0284c7;
+            --accent-green: #16a34a;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+            overflow: hidden;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.3s ease;
+        }
+
+        .header-top {
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 4px;
+        }
+
+        .header-left .subtitle {
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 40px;
+        }
+
+        .stat-box {
+            text-align: right;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .stat-value.loans {
+            color: #38bdf8;
+        }
+
+        .stat-value.balance {
+            color: #4ade80;
+        }
+
+        /* Breakdown Stats */
+        .header-breakdown {
+            border-top: 1px solid #334155;
+            background: rgba(15, 23, 42, 0.5);
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .header-breakdown.collapsed {
+            max-height: 0;
+            border-top: none;
+        }
+
+        .breakdown-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px;
+            background: rgba(15, 23, 42, 0.3);
+            border-top: 1px solid #334155;
+            cursor: pointer;
+            font-size: 12px;
+            color: #64748b;
+            transition: background 0.2s;
+        }
+
+        .breakdown-toggle:hover {
+            background: rgba(30, 41, 59, 0.5);
+            color: #94a3b8;
+        }
+
+        .breakdown-toggle svg {
+            transition: transform 0.3s ease;
+        }
+
+        .breakdown-toggle.collapsed svg {
+            transform: rotate(180deg);
+        }
+
+        .breakdown-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            padding: 15px 30px;
+        }
+
+        .breakdown-card {
+            padding: 10px 15px;
+            background: rgba(30, 41, 59, 0.6);
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+
+        .breakdown-card-label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .breakdown-color-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .breakdown-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .breakdown-count {
+            font-size: 16px;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .breakdown-balance {
+            font-size: 14px;
+            font-weight: 600;
+            color: #4ade80;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 300px;
+            background: #1e293b;
+            padding: 20px;
+            padding-bottom: 40px;
+            overflow-y: auto;
+            border-right: 1px solid #334155;
+            flex-shrink: 0;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .filter-group {
+            margin-bottom: 20px;
+        }
+
+        .filter-label {
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #f8fafc;
+            font-size: 14px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        select:hover {
+            border-color: #475569;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #38bdf8;
+        }
+
+        /* Legend */
+        .legend {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #334155;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+
+        .color-scale {
+            display: flex;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 8px;
+            margin-bottom: 6px;
+        }
+
+        .color-scale div {
+            flex: 1;
+        }
+
+        .scale-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        /* Loan Detail Panel */
+        .loan-detail {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #334155;
+            display: none;
+        }
+
+        .loan-detail.visible {
+            display: block;
+        }
+
+        .loan-detail-card {
+            background: #0f172a;
+            border-radius: 10px;
+            padding: 16px;
+            border: 1px solid #334155;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #1e293b;
+            font-size: 13px;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: #64748b;
+        }
+
+        .detail-value {
+            color: #f8fafc;
+            font-weight: 500;
+        }
+
+        .detail-value.active {
+            color: #4ade80;
+        }
+
+        .detail-value.nonaccrual {
+            color: #f87171;
+        }
+
+        /* Map Container */
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* View Toggle */
+        .view-toggle {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .view-btn {
+            flex: 1;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .view-btn.active {
+            background: #38bdf8;
+            border-color: #38bdf8;
+            color: #0f172a;
+        }
+
+        .view-btn:hover:not(.active) {
+            border-color: #475569;
+            color: #f8fafc;
+        }
+
+        /* Tooltip */
+        .deck-tooltip {
+            font-family: 'Inter', sans-serif;
+            background: #1e293b !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+            font-size: 13px !important;
+            color: #f8fafc !important;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3) !important;
+        }
+
+        /* Report Info */
+        .report-info {
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid #334155;
+            font-size: 11px;
+            color: #475569;
+        }
+
+        .report-info p {
+            margin-bottom: 4px;
+        }
+
+        /* Layer Toggle Styles */
+        .layer-toggles {
+            margin-bottom: 20px;
+        }
+
+        .toggle-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .toggle-item:hover {
+            border-color: #475569;
+        }
+
+        .toggle-item input[type="checkbox"] {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #475569;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .toggle-item input[type="checkbox"]:checked {
+            background: #38bdf8;
+            border-color: #38bdf8;
+        }
+
+        .toggle-item input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 2px;
+            width: 4px;
+            height: 8px;
+            border: solid #0f172a;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .toggle-item span {
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        .toggle-item.hurricane span {
+            color: #fca5a5;
+        }
+
+        /* Hurricane Legend */
+        .hurricane-legend {
+            margin-top: 20px;
+            padding: 12px;
+            background: #0f172a;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            display: none;
+        }
+
+        .hurricane-legend.visible {
+            display: block;
+        }
+
+        .hurricane-legend .section-title {
+            margin-bottom: 10px;
+            color: #fca5a5;
+        }
+
+        /* Quick Filter Buttons */
+        .quick-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        .quick-filter-btn {
+            padding: 6px 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .quick-filter-btn:hover {
+            border-color: #475569;
+            color: #f8fafc;
+        }
+
+        .quick-filter-btn.active {
+            background: #38bdf8;
+            border-color: #38bdf8;
+            color: #0f172a;
+        }
+
+        .quick-filter-btn.major {
+            border-color: #dc2626;
+        }
+
+        .quick-filter-btn.major:hover,
+        .quick-filter-btn.major.active {
+            background: #dc2626;
+            border-color: #dc2626;
+            color: #fff;
+        }
+
+        .quick-filter-btn.affected {
+            border-color: #f97316;
+        }
+
+        .quick-filter-btn.affected:hover,
+        .quick-filter-btn.affected.active {
+            background: #f97316;
+            border-color: #f97316;
+            color: #fff;
+        }
+
+        /* Multi-Select Parish Dropdown */
+        .multi-select-container {
+            position: relative;
+        }
+
+        .multi-select-header {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #f8fafc;
+            font-size: 14px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .multi-select-header:hover {
+            border-color: #475569;
+        }
+
+        .multi-select-header.open {
+            border-color: #38bdf8;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .multi-select-arrow {
+            transition: transform 0.2s;
+        }
+
+        .multi-select-header.open .multi-select-arrow {
+            transform: rotate(180deg);
+        }
+
+        .multi-select-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #0f172a;
+            border: 1px solid #38bdf8;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .multi-select-dropdown.open {
+            display: block;
+        }
+
+        .multi-select-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .multi-select-option:hover {
+            background: #1e293b;
+        }
+
+        .multi-select-option input[type="checkbox"] {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #475569;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .multi-select-option input[type="checkbox"]:checked {
+            background: #38bdf8;
+            border-color: #38bdf8;
+        }
+
+        .multi-select-option input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 1px;
+            width: 4px;
+            height: 7px;
+            border: solid #0f172a;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .parish-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+            flex: 1;
+        }
+
+        /* Impact Indicator Dots */
+        .impact-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .impact-dot.major {
+            background: #dc2626;
+            box-shadow: 0 0 6px rgba(220, 38, 38, 0.5);
+        }
+
+        .impact-dot.moderate {
+            background: #f97316;
+            box-shadow: 0 0 6px rgba(249, 115, 22, 0.5);
+        }
+
+        .impact-dot.minor {
+            background: #dbb6d6;
+            box-shadow: 0 0 6px rgba(219, 182, 214, 0.5);
+        }
+
+        .impact-dot.none {
+            background: #475569;
+        }
+
+        /* Selected count badge */
+        .selection-badge {
+            background: #38bdf8;
+            color: #0f172a;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: auto;
+        }
+
+        /* Loading spinner animation */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            position: fixed;
+            bottom: 20px;
+            right: 30px;
+            z-index: 10000;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px var(--shadow);
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .theme-toggle-icon {
+            font-size: 16px;
+        }
+
+        .theme-toggle-text {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        /* ========================================= */
+        /* LIGHT THEME OVERRIDES */
+        /* ========================================= */
+        [data-theme="light"] .header {
+            background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] .header-left h1 {
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .header-left .subtitle {
+            color: var(--text-label);
+        }
+
+        [data-theme="light"] .stat-label {
+            color: var(--text-label);
+        }
+
+        [data-theme="light"] .stat-value {
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .header-breakdown {
+            background: rgba(241, 245, 249, 0.5);
+            border-top: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .breakdown-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .breakdown-card-label {
+            color: var(--text-label);
+        }
+
+        [data-theme="light"] .breakdown-count {
+            color: var(--text-muted);
+        }
+
+        [data-theme="light"] .breakdown-toggle {
+            background: rgba(241, 245, 249, 0.5);
+            border-top: 1px solid var(--border-color);
+            color: var(--text-label);
+        }
+
+        [data-theme="light"] .breakdown-toggle:hover {
+            background: rgba(226, 232, 240, 0.8);
+            color: var(--text-muted);
+        }
+
+        [data-theme="light"] .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .section-title {
+            color: var(--text-label);
+        }
+
+        [data-theme="light"] .filter-label {
+            color: var(--text-muted);
+        }
+
+        [data-theme="light"] .view-btn {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .view-btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--border-hover);
+        }
+
+        [data-theme="light"] .view-btn.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        [data-theme="light"] .toggle-item {
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .multi-select-header {
+            background: var(--bg-dropdown);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .multi-select-header:hover {
+            border-color: var(--border-hover);
+        }
+
+        [data-theme="light"] .multi-select-header.open {
+            border-color: var(--accent-blue);
+        }
+
+        [data-theme="light"] .multi-select-dropdown {
+            background: var(--bg-dropdown);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        [data-theme="light"] .multi-select-option {
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .multi-select-option:hover {
+            background: var(--bg-tertiary);
+        }
+
+        [data-theme="light"] .multi-select-option input[type="checkbox"] {
+            border: 2px solid var(--border-hover);
+        }
+
+        [data-theme="light"] .multi-select-option input[type="checkbox"]:checked {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        [data-theme="light"] .quick-filter-btn {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .quick-filter-btn:hover {
+            background: var(--bg-tertiary);
+        }
+
+        [data-theme="light"] .quick-filter-btn.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+        }
+
+        [data-theme="light"] .legend-item span {
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] select {
+            background: var(--bg-dropdown);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] select:hover {
+            border-color: var(--border-hover);
+        }
+
+        [data-theme="light"] .loan-detail {
+            background: var(--bg-dropdown);
+            border-left: 1px solid var(--border-color);
+            box-shadow: -4px 0 12px var(--shadow);
+        }
+
+        [data-theme="light"] .detail-header h3 {
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .detail-label {
+            color: var(--text-label);
+        }
+
+        [data-theme="light"] .detail-value {
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .close-detail {
+            color: var(--text-muted);
+        }
+
+        [data-theme="light"] .close-detail:hover {
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .hurricane-legend {
+            background: rgba(241, 245, 249, 0.9);
+            border: 1px solid var(--border-color);
+        }
+
+        /* Layer Visibility Light Mode */
+        [data-theme="light"] .toggle-item {
+            background: var(--bg-dropdown);
+            border: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .toggle-item:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-tertiary);
+        }
+
+        [data-theme="light"] .toggle-item span {
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .toggle-item input[type="checkbox"] {
+            border: 2px solid var(--border-color);
+        }
+
+        [data-theme="light"] .toggle-item input[type="checkbox"]:checked {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        [data-theme="light"] .toggle-item input[type="checkbox"]:checked::after {
+            border-color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="theme-toggle" onclick="toggleTheme()">
+        <span class="theme-toggle-icon" id="themeIcon">🌙</span>
+        <span class="theme-toggle-text">Dark Mode</span>
+    </div>
+
+    <header class="header">
+        <div class="header-top">
+            <div class="header-left">
+                <h1>JN Bank Loan Portfolio</h1>
+                <p class="subtitle">Interactive Geospatial Report • September 2025</p>
+            </div>
+            <div class="header-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Total Loans in Jamaica</div>
+                    <div class="stat-value loans" id="totalLoans">--</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Total Converted Balance</div>
+                    <div class="stat-value balance" id="totalBalance">--</div>
+                </div>
+            </div>
+        </div>
+        <div class="header-breakdown" id="breakdownContainer">
+            <div class="breakdown-grid" id="breakdownStats">
+                <!-- Dynamically populated breakdown stats -->
+            </div>
+        </div>
+        <div class="breakdown-toggle" id="breakdownToggle" onclick="toggleBreakdown()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+            <span id="breakdownToggleText">Hide Product Breakdown</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar">
+            <div class="section-title">View Mode</div>
+            <div class="view-toggle">
+                <button class="view-btn" id="btn3D" onclick="setView('3d')">3D Hexbin</button>
+                <button class="view-btn active" id="btnPoints" onclick="setView('points')">Points</button>
+            </div>
+
+            <div class="section-title">Layer Visibility</div>
+            <div class="layer-toggles">
+                <label class="toggle-item">
+                    <input type="checkbox" id="toggleLoans" checked onchange="toggleLayer('loans')">
+                    <span>Loan Data</span>
+                </label>
+                <label class="toggle-item hurricane">
+                    <input type="checkbox" id="toggleHurricane" onchange="toggleLayer('hurricane')">
+                    <span>Hurricane Melissa Impact</span>
+                </label>
+            </div>
+
+            <div class="section-title">Filters</div>
+
+            <div class="filter-group">
+                <label class="filter-label">Loan Product</label>
+                <div class="multi-select-container" id="loanProductMultiSelect">
+                    <div class="multi-select-header" onclick="toggleLoanProductDropdown()">
+                        <span id="loanProductSelectionText">All Loan Products</span>
+                        <svg class="multi-select-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M3 4.5L6 7.5L9 4.5" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="multi-select-dropdown" id="loanProductDropdown">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Account Status</label>
+                <label for="filterStatus"></label><select id="filterStatus" onchange="applyFilters()">
+                    <option value="all">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="NonAccrual">Non-Accrual</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Quick Filters</label>
+                <div class="quick-filters">
+                    <button class="quick-filter-btn major" onclick="quickFilterParish('major')" id="btnMajor">
+                        <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#dc2626"/></svg>
+                        Major Impact
+                    </button>
+                    <button class="quick-filter-btn affected" onclick="quickFilterParish('affected')" id="btnAffected">
+                        <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#f97316"/></svg>
+                        All Affected
+                    </button>
+                    <button class="quick-filter-btn" onclick="quickFilterParish('all')" id="btnAll">
+                        All Parishes
+                    </button>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label class="filter-label">Parish Selection</label>
+                <div class="multi-select-container" id="parishMultiSelect">
+                    <div class="multi-select-header" onclick="toggleParishDropdown()">
+                        <span id="parishSelectionText">All Parishes</span>
+                        <svg class="multi-select-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M3 4.5L6 7.5L9 4.5" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="multi-select-dropdown" id="parishDropdown">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="legend">
+                <div class="section-title">Density Scale (Loan Count)</div>
+                <div class="color-scale">
+                    <div style="background: #0197bd;"></div>
+                    <div style="background: #49e3ce;"></div>
+                    <div style="background: #d8feb5;"></div>
+                    <div style="background: #feedb1;"></div>
+                    <div style="background: #fead54;"></div>
+                    <div style="background: #d1374e;"></div>
+                </div>
+                <div class="scale-labels">
+                    <span>Low</span>
+                    <span>High</span>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <div class="section-title">Loan Products (Point View)</div>
+                    <div id="loanProductLegend">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="hurricane-legend" id="hurricaneLegend">
+                <div class="section-title">Hurricane Melissa Impact</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgb(220, 38, 38);"></div>
+                    <span>Major Impact</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgb(249, 115, 22);"></div>
+                    <span>Moderate Impact</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgb(219, 182, 214);"></div>
+                    <span>Minor Impact</span>
+                </div>
+            </div>
+
+            <div class="loan-detail" id="loanDetail">
+                <div class="section-title">Selected Loan</div>
+                <div class="loan-detail-card">
+                    <div class="detail-row">
+                        <span class="detail-label">Account</span>
+                        <span class="detail-value" id="detailAccount">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Balance</span>
+                        <span class="detail-value" id="detailBalance">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Type</span>
+                        <span class="detail-value" id="detailType">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Status</span>
+                        <span class="detail-value" id="detailStatus">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Parish</span>
+                        <span class="detail-value" id="detailParish">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Industry</span>
+                        <span class="detail-value" id="detailIndustry">--</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Days Past Due</span>
+                        <span class="detail-value" id="detailDPD">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="report-info">
+                <p>Data as of: September 30, 2025</p>
+                <p>Generated by: Data & Analytics Team</p>
+            </div>
+        </aside>
+
+        <div class="map-container">
+            <div id="map">
+                <div id="mapLoader" style="display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8; font-size: 14px;">
+                    <div style="text-align: center;">
+                        <svg width="40" height="40" viewBox="0 0 40 40" style="animation: spin 1s linear infinite; margin-bottom: 10px;">
+                            <circle cx="20" cy="20" r="16" stroke="#334155" stroke-width="4" fill="none"/>
+                            <circle cx="20" cy="20" r="16" stroke="#38bdf8" stroke-width="4" fill="none" stroke-dasharray="80" stroke-dashoffset="60"/>
+                        </svg>
+                        <div>Loading map...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="jn_loan_data.js"></script>
+    <script>
+        // =====================================================================
+        // Configuration
+        // =====================================================================
+        const JAMAICA_CENTER = [-77.3, 18.15];
+        const INITIAL_ZOOM = 9;
+
+        const LOAN_TYPE_COLORS = {
+            'Personal Unsecured Loan': [59, 130, 246],   // Blue
+            'Mortgage Loans': [34, 197, 94],             // Green
+            'Business Loans': [236, 72, 153],            // Pink/Magenta (changed from orange to avoid hurricane conflict)
+            'Other Loans': [168, 85, 247]                // Purple
+        };
+
+        const LOAN_PRODUCT_COLORS = {
+            'Auto Loans': [236, 72, 153],                // Pink
+            'Business Loans': [249, 115, 22],            // Orange
+            'Commercial Real Estate': [14, 165, 233],    // Sky Blue
+            'Construction Mortgage': [132, 204, 22],     // Lime
+            'Credit Card': [244, 63, 94],                // Rose
+            'Education Loans': [168, 85, 247],           // Purple
+            'Equipment Financing': [234, 179, 8],        // Yellow
+            'Home Equity Loans': [34, 197, 94],          // Green
+            'Home Improvement': [20, 184, 166],          // Teal
+            'Line of Credit': [139, 92, 246],            // Violet
+            'Medical Loans': [251, 146, 60],             // Amber
+            'Mortgage': [59, 130, 246],                  // Blue
+            'Personal Loan': [99, 102, 241],             // Indigo
+            'Small Business': [251, 191, 36],            // Orange-Yellow
+            'Other': [156, 163, 175]                     // Gray
+        };
+
+        // Dynamic color palette for products when single loan type is selected
+        const DYNAMIC_PRODUCT_COLORS = [
+            [59, 130, 246],    // Blue
+            [34, 197, 94],     // Green
+            [236, 72, 153],    // Pink
+            [251, 191, 36],    // Amber
+            [139, 92, 246],    // Violet
+            [14, 165, 233],    // Sky
+            [244, 63, 94],     // Rose
+            [132, 204, 22],    // Lime
+            [20, 184, 166],    // Teal
+            [251, 146, 60],    // Orange
+            [99, 102, 241],    // Indigo
+            [234, 179, 8],     // Yellow
+            [168, 85, 247],    // Purple
+            [156, 163, 175],   // Gray
+            [14, 116, 144],    // Cyan
+            [220, 38, 38],     // Red
+            [126, 34, 206],    // Deep Purple
+            [22, 163, 74],     // Emerald
+            [202, 138, 4],     // Dark Yellow
+            [219, 39, 119]     // Deep Pink
+        ];
+
+        function getProductColor(product, allProducts) {
+            // Assign unique colors to each product
+            const productIndex = allProducts.indexOf(product);
+            return DYNAMIC_PRODUCT_COLORS[productIndex % DYNAMIC_PRODUCT_COLORS.length];
+        }
+
+        // Cache for product colors to avoid recalculating for every point
+        let productColorCache = {};
+
+        function buildProductColorCache() {
+            // Get all products
+            const allProducts = [...new Set(LOAN_DATA.map(d => d.loan_type2))].sort();
+
+            // Build cache: product -> color mapping
+            productColorCache = {};
+            allProducts.forEach(product => {
+                productColorCache[product] = getProductColor(product, allProducts);
+            });
+        }
+
+        function getMapPointColor(loanData) {
+            // Use cached color if available, otherwise fallback
+            return productColorCache[loanData.loan_type2] || [128, 128, 128];
+        }
+
+        const COLOR_RANGE = [
+            [1, 152, 189],
+            [73, 227, 206],
+            [216, 254, 181],
+            [254, 237, 177],
+            [254, 173, 84],
+            [209, 55, 78]
+        ];
+
+        // Hurricane Melissa Impact Configuration
+        const HURRICANE_IMPACT = {
+            'Hanover': 'major',
+            'Westmoreland': 'major',
+            'SaintElizabeth': 'major',
+            'SaintJames': 'major',
+            'Trelawny': 'major',
+            'Manchester': 'major',
+            'SaintAnn': 'moderate',
+            'Clarendon': 'moderate',
+            'SaintCatherine': 'moderate',
+            'SaintMary': 'minor',
+            'SaintAndrew': 'minor',
+            'Kingston': 'minor',
+            'Portland': 'minor',
+            'SaintThomas': 'minor'
+        };
+
+        const IMPACT_COLORS = {
+            'major': [220, 38, 38, 180],      // Red
+            'moderate': [249, 115, 22, 180],  // Orange
+            'minor': [219, 182, 214, 180]     // Light pink/purple
+        };
+
+        // Parish name mapping (loan data format -> GeoJSON format)
+        const PARISH_NAME_MAP = {
+            'St Andrew': 'SaintAndrew',
+            'St Ann': 'SaintAnn',
+            'St Catherine': 'SaintCatherine',
+            'St Elizabeth': 'SaintElizabeth',
+            'St James': 'SaintJames',
+            'St Mary': 'SaintMary',
+            'St Thomas': 'SaintThomas',
+            'Hanover': 'Hanover',
+            'Westmoreland': 'Westmoreland',
+            'Trelawny': 'Trelawny',
+            'Manchester': 'Manchester',
+            'Clarendon': 'Clarendon',
+            'Kingston': 'Kingston',
+            'Portland': 'Portland'
+        };
+
+        // Invalid parish values to filter out
+        const INVALID_PARISHES = ['Mobile', 'Overseas', 'Kingston & St. Andrew'];
+
+        // Excluded loan products (will not appear in filters, counts, or map)
+        const EXCLUDED_PRODUCTS = ['JNSBL - Staff Loan'];
+
+        // Check if a loan product should be excluded
+        function isExcludedProduct(productName) {
+            return EXCLUDED_PRODUCTS.includes(productName);
+        }
+
+        // Format balance with dynamic units (K, M, B)
+        function formatBalance(amount) {
+            if (amount >= 1e9) {
+                return '$' + (amount / 1e9).toFixed(2) + 'B';
+            } else if (amount >= 1e6) {
+                return '$' + (amount / 1e6).toFixed(2) + 'M';
+            } else if (amount >= 1e3) {
+                return '$' + (amount / 1e3).toFixed(2) + 'K';
+            } else {
+                return '$' + amount.toFixed(2);
+            }
+        }
+
+        // Normalize parish names to consistent format
+        function normalizeParish(parish) {
+            if (!parish || typeof parish !== 'string') return null;
+
+            // Trim whitespace
+            let normalized = parish.trim();
+
+            // Filter invalid values
+            if (INVALID_PARISHES.includes(normalized)) return null;
+
+            // Normalize "St." to "St " (remove period, ensure single space)
+            normalized = normalized.replace(/St\.\s*/g, 'St ');
+
+            return normalized;
+        }
+
+        // Get parish impact level from loan data parish name
+        function getParishImpact(parishName) {
+            const normalized = normalizeParish(parishName);
+            if (!normalized) return 'none';
+            const geoName = PARISH_NAME_MAP[normalized] || normalized;
+            return HURRICANE_IMPACT[geoName] || 'none';
+        }
+
+        // Check if a loan product is a JNSBL product (excluding Staff Loan)
+        function isJNSBLProduct(productName) {
+            if (!productName) return false;
+            const upperName = productName.toUpperCase();
+            return upperName.startsWith('JNSBL') && !upperName.includes('STAFF LOAN');
+        }
+
+        // Get the appropriate parish for a loan based on selected products
+        function getParishForLoan(loan, selectedProducts) {
+            // If filtering for JNSBL products only, use business_parish
+            if (selectedProducts && selectedProducts.size > 0) {
+                const allJNSBL = [...selectedProducts].every(p => isJNSBLProduct(p));
+                if (allJNSBL && loan.business_parish) {
+                    return loan.business_parish;
+                }
+            }
+            // Otherwise use regular parish
+            return loan.parish;
+        }
+
+        // Major impact parishes (loan data format)
+        const MAJOR_PARISHES = ['Hanover', 'Westmoreland', 'St Elizabeth', 'St James', 'Trelawny', 'Manchester'];
+        // All affected parishes (major + moderate)
+        const AFFECTED_PARISHES = [...MAJOR_PARISHES, 'St Ann', 'Clarendon', 'St Catherine'];
+
+        // =====================================================================
+        // State
+        // =====================================================================
+        let filteredData = [...LOAN_DATA];
+        let currentView = 'points';
+        let deckgl = null;
+        let parishGeoJSON = null;
+        let showLoans = true;
+        let showHurricane = false;
+        let selectedParishes = new Set(); // Empty means all selected
+        let currentQuickFilter = 'all';
+
+        // =====================================================================
+        // Initialize
+        // =====================================================================
+        function init() {
+            populateFilters();
+            updateStats();
+            parishGeoJSON = PARISH_GEOJSON;
+            initMap();
+        }
+
+        function populateFilters() {
+            // Populate multi-select loan product dropdown
+            populateLoanProductMultiSelect();
+
+            // Populate multi-select parish dropdown
+            populateParishMultiSelect();
+
+            // Populate loan product legend
+            populateLoanProductLegend();
+
+            // Build product color cache for map performance
+            buildProductColorCache();
+        }
+
+        function populateLoanProductMultiSelect() {
+            // Filter out excluded products
+            const loanProducts = [...new Set(LOAN_DATA.map(d => d.loan_type2))]
+                .filter(p => !isExcludedProduct(p))
+                .sort();
+            const dropdown = document.getElementById('loanProductDropdown');
+
+            // Get previously available products (before repopulating)
+            const previouslyAvailableProducts = new Set();
+            document.querySelectorAll('#loanProductDropdown input[data-loanproduct]').forEach(cb => {
+                previouslyAvailableProducts.add(cb.dataset.loanproduct);
+            });
+
+            // Remember which products were checked before repopulating
+            const previouslyChecked = new Set();
+            document.querySelectorAll('#loanProductDropdown input[data-loanproduct]:checked').forEach(cb => {
+                previouslyChecked.add(cb.dataset.loanproduct);
+            });
+
+            // Detect if we're expanding to more products (e.g., going from single type to all types)
+            const isExpanding = loanProducts.length > previouslyAvailableProducts.size;
+
+            dropdown.innerHTML = '';
+
+            // Add "Select All" option
+            const selectAllOption = document.createElement('div');
+            selectAllOption.className = 'multi-select-option';
+            selectAllOption.innerHTML = `
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1;">
+                    <input type="checkbox" id="loanproduct-all" checked onchange="toggleAllLoanProducts(this.checked)">
+                    <span><strong>Select All</strong></span>
+                </label>
+            `;
+            dropdown.appendChild(selectAllOption);
+
+            loanProducts.forEach((product, index) => {
+                const option = document.createElement('div');
+                option.className = 'multi-select-option';
+                const typeId = product.replace(/\s/g, '');
+
+                // If expanding (going to all types), check all products
+                // Otherwise, preserve previous state
+                const isChecked = isExpanding ? true : (previouslyChecked.size === 0 || previouslyChecked.has(product));
+
+                option.innerHTML = `
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1;">
+                        <input type="checkbox" id="loanproduct-${typeId}" ${isChecked ? 'checked' : ''}
+                               data-loanproduct="${product}" onchange="toggleLoanProductSelection('${product}', this.checked)">
+                        <span>${product}</span>
+                    </label>
+                `;
+                dropdown.appendChild(option);
+            });
+
+            updateLoanProductSelectionText();
+        }
+
+        function populateLoanProductLegend() {
+            const legendContainer = document.getElementById('loanProductLegend');
+            if (!legendContainer) return; // Skip if legend doesn't exist
+
+            // Filter out excluded products
+            const loanProducts = [...new Set(LOAN_DATA.map(d => d.loan_type2))]
+                .filter(p => !isExcludedProduct(p))
+                .sort();
+            legendContainer.innerHTML = '';
+
+            loanProducts.forEach((product, index) => {
+                // Always use unique colors from DYNAMIC_PRODUCT_COLORS array
+                const color = DYNAMIC_PRODUCT_COLORS[index % DYNAMIC_PRODUCT_COLORS.length];
+                const hexColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                legendItem.innerHTML = `
+                    <div class="legend-color" style="background: ${hexColor};"></div>
+                    <span>${product}</span>
+                `;
+                legendContainer.appendChild(legendItem);
+            });
+        }
+
+        // Get the current parish field to use based on selected loan products
+        function getCurrentParishField() {
+            const checkedLoanProducts = new Set();
+            document.querySelectorAll('#loanProductDropdown input[data-loanproduct]:checked').forEach(cb => {
+                checkedLoanProducts.add(cb.dataset.loanproduct);
+            });
+
+            // Use business_parish when only JNSBL products are selected
+            if (checkedLoanProducts.size > 0 && [...checkedLoanProducts].every(p => isJNSBLProduct(p))) {
+                return 'business_parish';
+            }
+            return 'parish';
+        }
+
+        function populateParishMultiSelect() {
+            const parishField = getCurrentParishField();
+            // Use the preferred parish field, normalize, and filter out invalid values
+            const parishes = [...new Set(LOAN_DATA.map(d => {
+                const preferredParish = d[parishField];
+                const rawParish = (preferredParish && typeof preferredParish === 'string') ? preferredParish : d.parish;
+                return normalizeParish(rawParish);
+            }).filter(p => p !== null))];
+            const dropdown = document.getElementById('parishDropdown');
+
+            // Sort parishes by impact level (major first, then moderate, then minor, then none)
+            const impactOrder = { 'major': 0, 'moderate': 1, 'minor': 2, 'none': 3 };
+            parishes.sort((a, b) => {
+                const impactA = impactOrder[getParishImpact(a)];
+                const impactB = impactOrder[getParishImpact(b)];
+                if (impactA !== impactB) return impactA - impactB;
+                return String(a).localeCompare(String(b));
+            });
+
+            dropdown.innerHTML = '';
+
+            // Add "Select All" option
+            const selectAllOption = document.createElement('div');
+            selectAllOption.className = 'multi-select-option';
+            selectAllOption.innerHTML = `
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1;">
+                    <input type="checkbox" id="parish-all" checked onchange="toggleAllParishes(this.checked)">
+                    <span class="parish-label"><strong>Select All</strong></span>
+                </label>
+            `;
+            dropdown.appendChild(selectAllOption);
+
+            parishes.forEach(parish => {
+                const impact = getParishImpact(parish);
+                const option = document.createElement('div');
+                option.className = 'multi-select-option';
+                option.innerHTML = `
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1;">
+                        <input type="checkbox" id="parish-${parish.replace(/\s/g, '')}" checked
+                               data-parish="${parish}" onchange="toggleParishSelection('${parish}', this.checked)">
+                        <span class="parish-label">
+                            <span class="impact-dot ${impact}"></span>
+                            ${parish}
+                        </span>
+                    </label>
+                `;
+                dropdown.appendChild(option);
+            });
+        }
+
+        // Refresh parish dropdown when loan product selection changes
+        function refreshParishDropdown() {
+            // Remember which parishes were selected
+            const previouslySelected = new Set();
+            document.querySelectorAll('#parishDropdown input[data-parish]:checked').forEach(cb => {
+                previouslySelected.add(cb.dataset.parish);
+            });
+
+            // Repopulate the dropdown
+            populateParishMultiSelect();
+
+            // Try to restore previous selections where possible
+            if (previouslySelected.size > 0) {
+                const allCheckboxes = document.querySelectorAll('#parishDropdown input[data-parish]');
+                allCheckboxes.forEach(cb => {
+                    cb.checked = previouslySelected.has(cb.dataset.parish);
+                });
+
+                // Update select all checkbox
+                const selectAllCheckbox = document.getElementById('parish-all');
+                const allChecked = document.querySelectorAll('#parishDropdown input[data-parish]:not(:checked)').length === 0;
+                selectAllCheckbox.checked = allChecked;
+            }
+
+            updateParishSelectionText();
+        }
+
+        function toggleParishDropdown() {
+            const header = document.querySelector('.multi-select-header');
+            const dropdown = document.getElementById('parishDropdown');
+            header.classList.toggle('open');
+            dropdown.classList.toggle('open');
+        }
+
+        function toggleAllParishes(checked) {
+            const checkboxes = document.querySelectorAll('#parishDropdown input[data-parish]');
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+            });
+            
+            if (checked) {
+                selectedParishes.clear();
+            } else {
+                const parishes = [...new Set(LOAN_DATA.map(d => d.parish))];
+                selectedParishes = new Set(parishes);
+                // Then clear it since none are selected
+                selectedParishes.clear();
+            }
+            
+            // Reset quick filter buttons
+            updateQuickFilterButtons('all');
+            
+            updateParishSelectionText();
+            applyFilters();
+        }
+
+        function toggleParishSelection(parish, checked) {
+            const allParishes = [...new Set(LOAN_DATA.map(d => d.parish))];
+            
+            if (selectedParishes.size === 0 && !checked) {
+                // First unchecked - start tracking selections
+                allParishes.forEach(p => {
+                    if (p !== parish) selectedParishes.add(p);
+                });
+            } else if (checked) {
+                selectedParishes.delete(parish);
+                // If all are now selected, clear the set (means all)
+                if (selectedParishes.size === 0 || 
+                    allParishes.every(p => !selectedParishes.has(p) || p === parish)) {
+                    // Check if we should clear
+                    const uncheckedCount = document.querySelectorAll('#parishDropdown input[data-parish]:not(:checked)').length;
+                    if (uncheckedCount === 0) {
+                        selectedParishes.clear();
+                    }
+                }
+            } else {
+                selectedParishes.add(parish);
+            }
+
+            // Update "Select All" checkbox
+            const selectAllCheckbox = document.getElementById('parish-all');
+            const allChecked = document.querySelectorAll('#parishDropdown input[data-parish]:not(:checked)').length === 0;
+            selectAllCheckbox.checked = allChecked;
+
+            // Reset quick filter to custom
+            updateQuickFilterButtons('custom');
+            
+            updateParishSelectionText();
+            applyFilters();
+        }
+
+        function updateParishSelectionText() {
+            const textEl = document.getElementById('parishSelectionText');
+            const allParishes = [...new Set(LOAN_DATA.map(d => d.parish))];
+            const checkedBoxes = document.querySelectorAll('#parishDropdown input[data-parish]:checked');
+            const checkedCount = checkedBoxes.length;
+
+            if (checkedCount === 0) {
+                textEl.textContent = 'No parishes selected';
+            } else if (checkedCount === allParishes.length) {
+                textEl.textContent = 'All Parishes';
+            } else if (checkedCount === 1) {
+                textEl.textContent = checkedBoxes[0].dataset.parish;
+            } else {
+                textEl.textContent = `${checkedCount} parishes selected`;
+            }
+        }
+
+        // Loan Product dropdown functions
+        function toggleLoanProductDropdown() {
+            const header = document.getElementById('loanProductMultiSelect').querySelector('.multi-select-header');
+            const dropdown = document.getElementById('loanProductDropdown');
+            header.classList.toggle('open');
+            dropdown.classList.toggle('open');
+        }
+
+        function toggleAllLoanProducts(checked) {
+            const checkboxes = document.querySelectorAll('#loanProductDropdown input[data-loanproduct]');
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+            });
+            updateLoanProductSelectionText();
+            // Refresh parish dropdown when loan product selection changes
+            refreshParishDropdown();
+            applyFilters();
+        }
+
+        function toggleLoanProductSelection(product, checked) {
+            const selectAllCheckbox = document.getElementById('loanproduct-all');
+            const allCheckboxes = document.querySelectorAll('#loanProductDropdown input[data-loanproduct]');
+            const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+            selectAllCheckbox.checked = allChecked;
+            updateLoanProductSelectionText();
+            // Refresh parish dropdown when loan product selection changes
+            refreshParishDropdown();
+            applyFilters();
+        }
+
+        function updateLoanProductSelectionText() {
+            const textEl = document.getElementById('loanProductSelectionText');
+            const allProducts = [...new Set(LOAN_DATA.map(d => d.loan_type2))];
+            const checkedBoxes = document.querySelectorAll('#loanProductDropdown input[data-loanproduct]:checked');
+            const checkedCount = checkedBoxes.length;
+
+            if (checkedCount === 0) {
+                textEl.textContent = 'No loan products selected';
+            } else if (checkedCount === allProducts.length) {
+                textEl.textContent = 'All Loan Products';
+            } else if (checkedCount === 1) {
+                textEl.textContent = checkedBoxes[0].dataset.loanproduct;
+            } else {
+                textEl.textContent = `${checkedCount} products selected`;
+            }
+        }
+
+        function quickFilterParish(filter) {
+            const checkboxes = document.querySelectorAll('#parishDropdown input[data-parish]');
+            
+            checkboxes.forEach(cb => {
+                const parish = cb.dataset.parish;
+                if (filter === 'all') {
+                    cb.checked = true;
+                } else if (filter === 'major') {
+                    cb.checked = MAJOR_PARISHES.includes(parish);
+                } else if (filter === 'affected') {
+                    cb.checked = AFFECTED_PARISHES.includes(parish);
+                }
+            });
+
+            // Update Select All checkbox
+            const selectAllCheckbox = document.getElementById('parish-all');
+            selectAllCheckbox.checked = filter === 'all';
+
+            // Update selected parishes set
+            if (filter === 'all') {
+                selectedParishes.clear();
+            } else {
+                const targetParishes = filter === 'major' ? MAJOR_PARISHES : AFFECTED_PARISHES;
+                const allParishes = [...new Set(LOAN_DATA.map(d => d.parish))];
+                selectedParishes = new Set(allParishes.filter(p => !targetParishes.includes(p)));
+            }
+
+            updateQuickFilterButtons(filter);
+            updateParishSelectionText();
+            applyFilters();
+        }
+
+        function updateQuickFilterButtons(activeFilter) {
+            currentQuickFilter = activeFilter;
+            document.getElementById('btnMajor').classList.toggle('active', activeFilter === 'major');
+            document.getElementById('btnAffected').classList.toggle('active', activeFilter === 'affected');
+            document.getElementById('btnAll').classList.toggle('active', activeFilter === 'all');
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            // Close parish dropdown
+            const parishContainer = document.getElementById('parishMultiSelect');
+            if (parishContainer && !parishContainer.contains(e.target)) {
+                parishContainer.querySelector('.multi-select-header')?.classList.remove('open');
+                document.getElementById('parishDropdown')?.classList.remove('open');
+            }
+
+            // Close loan product dropdown
+            const loanProductContainer = document.getElementById('loanProductMultiSelect');
+            if (loanProductContainer && !loanProductContainer.contains(e.target)) {
+                loanProductContainer.querySelector('.multi-select-header')?.classList.remove('open');
+                document.getElementById('loanProductDropdown')?.classList.remove('open');
+            }
+        });
+
+        function updateStats() {
+            const totalLoans = filteredData.length;
+            const totalBalance = filteredData.reduce((sum, d) => sum + d.balance, 0);
+
+            document.getElementById('totalLoans').textContent = totalLoans.toLocaleString();
+            document.getElementById('totalBalance').textContent = formatBalance(totalBalance);
+
+            // Update breakdown stats
+            updateBreakdownStats();
+        }
+
+        function updateBreakdownStats() {
+            const breakdownContainer = document.getElementById('breakdownStats');
+            breakdownContainer.innerHTML = '';
+
+            // Show product breakdown - exclude Staff Loan
+            const products = [...new Set(filteredData.map(d => d.loan_type2))]
+                .filter(p => !isExcludedProduct(p))
+                .sort();
+
+            products.forEach(product => {
+                const productData = filteredData.filter(d => d.loan_type2 === product);
+                const count = productData.length;
+                const balance = productData.reduce((sum, d) => sum + d.balance, 0);
+
+                // Get color for this product
+                const color = productColorCache[product] || [156, 163, 175];
+                const hexColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+
+                const card = document.createElement('div');
+                card.className = 'breakdown-card';
+                card.innerHTML = `
+                    <div class="breakdown-card-label">
+                        <span class="breakdown-color-dot" style="background: ${hexColor};"></span>
+                        ${product}
+                    </div>
+                    <div class="breakdown-stats">
+                        <div class="breakdown-count">${count.toLocaleString()} loans</div>
+                        <div class="breakdown-balance">${formatBalance(balance)}</div>
+                    </div>
+                `;
+                breakdownContainer.appendChild(card);
+            });
+        }
+
+        function toggleBreakdown() {
+            const container = document.getElementById('breakdownContainer');
+            const toggle = document.getElementById('breakdownToggle');
+            const text = document.getElementById('breakdownToggleText');
+
+            container.classList.toggle('collapsed');
+            toggle.classList.toggle('collapsed');
+
+            if (container.classList.contains('collapsed')) {
+                text.textContent = 'Show Product Breakdown';
+            } else {
+                text.textContent = 'Hide Product Breakdown';
+            }
+        }
+
+        // =====================================================================
+        // Map Initialization
+        // =====================================================================
+        function getMapStyle() {
+            const theme = document.documentElement.getAttribute('data-theme');
+            if (theme === 'light') {
+                return 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+            }
+            return 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+        }
+
+        function initMap() {
+            try {
+                // Hide loading indicator
+                const loader = document.getElementById('mapLoader');
+                if (loader) loader.style.display = 'none';
+
+                deckgl = new deck.DeckGL({
+                    container: 'map',
+                    mapStyle: getMapStyle(),
+                    initialViewState: {
+                        longitude: JAMAICA_CENTER[0],
+                        latitude: JAMAICA_CENTER[1],
+                        zoom: INITIAL_ZOOM,
+                        pitch: 0,
+                        bearing: 0,
+                        minZoom: 8,
+                        maxZoom: 20
+                    },
+                    controller: true,
+                    layers: getLayers(),
+                    getTooltip: getTooltip,
+                    onClick: handleClick,
+                    onError: (error) => {
+                        console.error('Deck.gl error:', error);
+                    }
+                });
+                console.log('Map initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize map:', error);
+                document.getElementById('map').innerHTML = '<div style="color: #f87171; padding: 20px; text-align: center;">Failed to initialize map. Please refresh the page.</div>';
+            }
+        }
+
+        function getLayers() {
+            const layers = [];
+
+            // Hurricane impact layer (rendered first, underneath loan data)
+            if (showHurricane && parishGeoJSON) {
+                layers.push(
+                    new deck.GeoJsonLayer({
+                        id: 'hurricane-layer',
+                        data: parishGeoJSON,
+                        filled: true,
+                        stroked: true,
+                        getFillColor: feature => {
+                            const parishName = feature.properties.NAME_1;
+                            const impact = HURRICANE_IMPACT[parishName];
+                            return IMPACT_COLORS[impact] || [128, 128, 128, 100];
+                        },
+                        getLineColor: [51, 65, 85, 255],
+                        getLineWidth: 1,
+                        lineWidthMinPixels: 1,
+                        pickable: true
+                    })
+                );
+            }
+
+            // Loan data layers (rendered on top)
+            if (showLoans) {
+                if (currentView === '3d') {
+                    layers.push(
+                        new deck.HexagonLayer({
+                            id: 'hexagon-layer',
+                            data: filteredData,
+                            getPosition: d => [d.lon, d.lat],
+                            radius: 1000,
+                            elevationScale: 50,
+                            elevationRange: [0, 3000],
+                            extruded: true,
+                            pickable: true,
+                            colorRange: COLOR_RANGE,
+                            coverage: 0.8,
+                            gpuAggregation: false
+                        })
+                    );
+                } else {
+                    layers.push(
+                        new deck.ScatterplotLayer({
+                            id: 'scatter-layer',
+                            data: filteredData,
+                            getPosition: d => [d.lon, d.lat],
+                            getRadius: 150,
+                            getFillColor: d => getMapPointColor(d),
+                            getLineColor: [255, 255, 255, 255],
+                            lineWidthMinPixels: 1,
+                            lineWidthMaxPixels: 2,
+                            stroked: true,
+                            pickable: true,
+                            opacity: 0.8,
+                            radiusMinPixels: 3,
+                            radiusMaxPixels: 10
+                        })
+                    );
+                }
+            }
+
+            return layers;
+        }
+
+        function toggleLayer(layer) {
+            if (layer === 'loans') {
+                showLoans = document.getElementById('toggleLoans').checked;
+            } else if (layer === 'hurricane') {
+                showHurricane = document.getElementById('toggleHurricane').checked;
+                // Show/hide hurricane legend
+                document.getElementById('hurricaneLegend').classList.toggle('visible', showHurricane);
+            }
+            deckgl.setProps({ layers: getLayers() });
+        }
+
+        function getTooltip({object, layer}) {
+            if (!object) return null;
+
+            const tooltipStyle = {
+                backgroundColor: '#1e293b',
+                color: '#f8fafc',
+                borderRadius: '8px',
+                padding: '12px',
+                border: '1px solid #334155'
+            };
+
+            // Hurricane layer tooltip
+            if (layer && layer.id === 'hurricane-layer') {
+                const parishName = object.properties.NAME_1;
+                const impact = HURRICANE_IMPACT[parishName];
+                const impactLabel = impact ? impact.charAt(0).toUpperCase() + impact.slice(1) : 'Unknown';
+                const impactColor = impact === 'major' ? '#dc2626' : impact === 'moderate' ? '#f97316' : '#dbb6d6';
+                return {
+                    html: `
+                        <div>
+                            <strong>${parishName.replace(/Saint/g, 'St. ')}</strong><br/>
+                            <span style="color: ${impactColor};">Impact Level: ${impactLabel}</span>
+                        </div>
+                    `,
+                    style: tooltipStyle
+                };
+            }
+
+            // Loan data tooltips
+            if (currentView === '3d' && object.points) {
+                // Hexagon aggregated data (CPU aggregation provides points array)
+                const count = object.points.length;
+                const totalBal = object.points.reduce((sum, p) => sum + (p.balance || 0), 0);
+                return {
+                    html: `
+                        <div>
+                            <strong>Loan Count:</strong> ${count.toLocaleString()}<br/>
+                            <strong>Total Balance:</strong> $${(totalBal / 1e6).toFixed(2)}M
+                        </div>
+                    `,
+                    style: tooltipStyle
+                };
+            } else if (object.account) {
+                // Individual loan point - show business_parish for JNSBL products
+                const parishField = getCurrentParishField();
+                const rawParish = parishField === 'business_parish' && object.business_parish
+                    ? object.business_parish : object.parish;
+                const displayParish = normalizeParish(rawParish) || rawParish || 'N/A';
+                const parishLabel = parishField === 'business_parish' ? 'Business Parish' : 'Parish';
+                return {
+                    html: `
+                        <div>
+                            <strong>Account:</strong> ${object.account}<br/>
+                            <strong>Balance:</strong> $${object.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}<br/>
+                            <strong>Type:</strong> ${object.loan_type2}<br/>
+                            <strong>Status:</strong> ${object.status}<br/>
+                            <strong>${parishLabel}:</strong> ${displayParish}
+                        </div>
+                    `,
+                    style: tooltipStyle
+                };
+            }
+
+            return null;
+        }
+
+        function handleClick(info) {
+            if (currentView === 'points' && info.object) {
+                showLoanDetail(info.object);
+            }
+        }
+
+        function showLoanDetail(loan) {
+            document.getElementById('loanDetail').classList.add('visible');
+            document.getElementById('detailAccount').textContent = loan.account;
+            document.getElementById('detailBalance').textContent = '$' + loan.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            document.getElementById('detailType').textContent = loan.loan_type2;
+
+            const statusEl = document.getElementById('detailStatus');
+            statusEl.textContent = loan.status;
+            statusEl.className = 'detail-value ' + (loan.status === 'Active' ? 'active' : 'nonaccrual');
+
+            // Show business_parish for JNSBL products, normalized
+            const parishField = getCurrentParishField();
+            const rawParish = parishField === 'business_parish' && loan.business_parish
+                ? loan.business_parish : loan.parish;
+            const displayParish = normalizeParish(rawParish) || rawParish || 'N/A';
+            document.getElementById('detailParish').textContent = displayParish;
+            document.getElementById('detailIndustry').textContent = loan.industry || 'N/A';
+            document.getElementById('detailDPD').textContent = loan.dpd;
+        }
+
+        // =====================================================================
+        // Filters
+        // =====================================================================
+        function applyFilters() {
+            const status = document.getElementById('filterStatus').value;
+
+            // Get selected loan products from checkboxes
+            const checkedLoanProducts = new Set();
+            document.querySelectorAll('#loanProductDropdown input[data-loanproduct]:checked').forEach(cb => {
+                checkedLoanProducts.add(cb.dataset.loanproduct);
+            });
+
+            // Get selected parishes from checkboxes
+            const checkedParishes = new Set();
+            document.querySelectorAll('#parishDropdown input[data-parish]:checked').forEach(cb => {
+                checkedParishes.add(cb.dataset.parish);
+            });
+
+            // Determine if we should use business_parish (when only JNSBL products selected)
+            const useBusinessParish = checkedLoanProducts.size > 0 &&
+                [...checkedLoanProducts].every(p => isJNSBLProduct(p));
+
+            filteredData = LOAN_DATA.filter(d => {
+                // Exclude Staff Loan products entirely
+                if (isExcludedProduct(d.loan_type2)) return false;
+                // Multi-select loan product filter
+                if (checkedLoanProducts.size > 0 && !checkedLoanProducts.has(d.loan_type2)) return false;
+                // Status filter
+                if (status !== 'all' && d.status !== status) return false;
+                // Multi-select parish filter - use business_parish for JNSBL products, normalize before comparing
+                const rawParish = useBusinessParish && d.business_parish ? d.business_parish : d.parish;
+                const normalizedParish = normalizeParish(rawParish);
+                // Filter out loans with invalid parishes
+                if (!normalizedParish) return false;
+                if (checkedParishes.size > 0 && !checkedParishes.has(normalizedParish)) return false;
+                return true;
+            });
+
+            updateStats();
+            deckgl.setProps({ layers: getLayers() });
+        }
+
+        // =====================================================================
+        // View Toggle
+        // =====================================================================
+        function setView(view) {
+            currentView = view;
+
+            document.getElementById('btn3D').classList.toggle('active', view === '3d');
+            document.getElementById('btnPoints').classList.toggle('active', view === 'points');
+
+            // Adjust pitch for 2D/3D
+            const pitch = view === '3d' ? 45 : 0;
+            const maxZoom = view === '3d' ? 30 : 20;
+            deckgl.setProps({
+                layers: getLayers(),
+                initialViewState: {
+                    longitude: JAMAICA_CENTER[0],
+                    latitude: JAMAICA_CENTER[1],
+                    zoom: INITIAL_ZOOM,
+                    pitch: pitch,
+                    bearing: 0,
+                    minZoom: 8,
+                    maxZoom: maxZoom,
+                    transitionDuration: 500
+                }
+            });
+
+            // Hide loan detail when switching to 3D
+            if (view === '3d') {
+                document.getElementById('loanDetail').classList.remove('visible');
+            }
+        }
+
+        // Initialize on load with retry logic
+        function waitForDeckGL(retries = 10) {
+            if (typeof deck !== 'undefined' && deck.DeckGL) {
+                init();
+            } else if (retries > 0) {
+                console.log('Waiting for deck.gl to load... retries left:', retries);
+                setTimeout(() => waitForDeckGL(retries - 1), 500);
+            } else {
+                console.error('Failed to load deck.gl after multiple retries');
+                document.getElementById('map').innerHTML = '<div style="color: #f87171; padding: 20px; text-align: center;">Failed to load map. Please refresh the page.</div>';
+            }
+        }
+
+        // Initialize theme BEFORE map loads
+        (function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+
+        window.onload = function() {
+            // Update theme toggle button after DOM is ready
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            const icon = document.getElementById('themeIcon');
+            const text = document.querySelector('.theme-toggle-text');
+
+            if (savedTheme === 'light') {
+                icon.textContent = '☀️';
+                text.textContent = 'Light Mode';
+            } else {
+                icon.textContent = '🌙';
+                text.textContent = 'Dark Mode';
+            }
+
+            waitForDeckGL();
+        };
+
+        // Theme Toggle Functionality
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+
+            // Update button text and icon
+            const icon = document.getElementById('themeIcon');
+            const text = document.querySelector('.theme-toggle-text');
+
+            if (newTheme === 'light') {
+                icon.textContent = '☀️';
+                text.textContent = 'Light Mode';
+            } else {
+                icon.textContent = '🌙';
+                text.textContent = 'Dark Mode';
+            }
+
+            // Update map style
+            if (deckgl) {
+                deckgl.setProps({
+                    mapStyle: getMapStyle()
+                });
+            }
+        }
+    </script>
+</body>
+</html>
