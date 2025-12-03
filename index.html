@@ -403,6 +403,36 @@
             color: #f8fafc;
         }
 
+        /* Mortgage Address Toggle */
+        .address-toggle-container {
+            display: flex;
+            gap: 4px;
+        }
+
+        .address-toggle-btn {
+            flex: 1;
+            padding: 8px 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .address-toggle-btn.active {
+            background: #22c55e;
+            border-color: #22c55e;
+            color: #0f172a;
+        }
+
+        .address-toggle-btn:hover:not(.active) {
+            border-color: #475569;
+            color: #f8fafc;
+        }
+
         /* Tooltip */
         .deck-tooltip {
             font-family: 'Inter', sans-serif;
@@ -830,6 +860,23 @@
             border-color: var(--accent-blue);
         }
 
+        [data-theme="light"] .address-toggle-btn {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+
+        [data-theme="light"] .address-toggle-btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--border-hover);
+        }
+
+        [data-theme="light"] .address-toggle-btn.active {
+            background: #22c55e;
+            color: white;
+            border-color: #22c55e;
+        }
+
         [data-theme="light"] .toggle-item {
             color: var(--text-secondary);
         }
@@ -1034,6 +1081,18 @@
                 </div>
             </div>
 
+            <div class="filter-group" id="mortgageAddressToggle" style="display: none;">
+                <label class="filter-label">Mortgage Address View</label>
+                <div class="address-toggle-container">
+                    <button class="address-toggle-btn active" id="btnCustomerAddress" onclick="setMortgageAddressView('customer')">
+                        Customer Address
+                    </button>
+                    <button class="address-toggle-btn" id="btnSecurityAddress" onclick="setMortgageAddressView('security')">
+                        Security Address
+                    </button>
+                </div>
+            </div>
+
             <div class="filter-group">
                 <label class="filter-label">Account Status</label>
                 <label for="filterStatus"></label><select id="filterStatus" onchange="applyFilters()">
@@ -1170,6 +1229,7 @@
     </div>
 
     <script src="jn_loan_data.js"></script>
+    <script src="loan_data_mortgage.js"></script>
     <script>
         // =====================================================================
         // Configuration
@@ -1379,12 +1439,14 @@
         // State
         // =====================================================================
         let filteredData = [...LOAN_DATA];
+        let mapDisplayData = [...LOAN_DATA]; // Data used for map rendering (may differ from filteredData for security address view)
         let currentView = 'points';
         let deckgl = null;
         let parishGeoJSON = null;
         let showLoans = true;
         let showHurricane = false;
         let selectedParishes = new Set(); // Empty means all selected
+        let mortgageAddressView = 'customer'; // 'customer' or 'security'
         let currentQuickFilter = 'all';
 
         // =====================================================================
@@ -1897,12 +1959,13 @@
             }
 
             // Loan data layers (rendered on top)
+            // Uses mapDisplayData which can be customer or security address data for mortgages
             if (showLoans) {
                 if (currentView === '3d') {
                     layers.push(
                         new deck.HexagonLayer({
                             id: 'hexagon-layer',
-                            data: filteredData,
+                            data: mapDisplayData,
                             getPosition: d => [d.lon, d.lat],
                             radius: 1000,
                             elevationScale: 50,
@@ -1918,7 +1981,7 @@
                     layers.push(
                         new deck.ScatterplotLayer({
                             id: 'scatter-layer',
-                            data: filteredData,
+                            data: mapDisplayData,
                             getPosition: d => [d.lon, d.lat],
                             getRadius: 150,
                             getFillColor: d => getMapPointColor(d),
@@ -1992,19 +2055,34 @@
                     style: tooltipStyle
                 };
             } else if (object.account) {
-                // Individual loan point - show business_parish for JNSBL products
-                const parishField = getCurrentParishField();
-                const rawParish = parishField === 'business_parish' && object.business_parish
-                    ? object.business_parish : object.parish;
-                const displayParish = normalizeParish(rawParish) || rawParish || 'N/A';
-                const parishLabel = parishField === 'business_parish' ? 'Business Parish' : 'Parish';
+                // Individual loan point
+                // Check if this is security address data (has security_parish field)
+                const isSecurityData = object.security_parish !== undefined;
+
+                let displayParish, parishLabel;
+                if (isSecurityData) {
+                    // Security address data
+                    displayParish = normalizeParish(object.security_parish) || object.security_parish || 'N/A';
+                    parishLabel = 'Security Parish';
+                } else {
+                    // Customer address data - show business_parish for JNSBL products
+                    const parishField = getCurrentParishField();
+                    const rawParish = parishField === 'business_parish' && object.business_parish
+                        ? object.business_parish : object.parish;
+                    displayParish = normalizeParish(rawParish) || rawParish || 'N/A';
+                    parishLabel = parishField === 'business_parish' ? 'Business Parish' : 'Parish';
+                }
+
+                // Derive status for security data
+                const status = isSecurityData ? (object.dpd > 90 ? 'NonAccrual' : 'Active') : object.status;
+
                 return {
                     html: `
                         <div>
                             <strong>Account:</strong> ${object.account}<br/>
                             <strong>Balance:</strong> $${object.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}<br/>
                             <strong>Type:</strong> ${object.loan_type2}<br/>
-                            <strong>Status:</strong> ${object.status}<br/>
+                            <strong>Status:</strong> ${status}<br/>
                             <strong>${parishLabel}:</strong> ${displayParish}
                         </div>
                     `,
@@ -2027,17 +2105,31 @@
             document.getElementById('detailBalance').textContent = '$' + loan.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
             document.getElementById('detailType').textContent = loan.loan_type2;
 
-            const statusEl = document.getElementById('detailStatus');
-            statusEl.textContent = loan.status;
-            statusEl.className = 'detail-value ' + (loan.status === 'Active' ? 'active' : 'nonaccrual');
+            // Check if this is security address data
+            const isSecurityData = loan.security_parish !== undefined;
 
-            // Show business_parish for JNSBL products, normalized
-            const parishField = getCurrentParishField();
-            const rawParish = parishField === 'business_parish' && loan.business_parish
-                ? loan.business_parish : loan.parish;
-            const displayParish = normalizeParish(rawParish) || rawParish || 'N/A';
+            // Derive status for security data
+            const status = isSecurityData ? (loan.dpd > 90 ? 'NonAccrual' : 'Active') : loan.status;
+            const statusEl = document.getElementById('detailStatus');
+            statusEl.textContent = status;
+            statusEl.className = 'detail-value ' + (status === 'Active' ? 'active' : 'nonaccrual');
+
+            // Show appropriate parish field
+            let displayParish;
+            if (isSecurityData) {
+                displayParish = normalizeParish(loan.security_parish) || loan.security_parish || 'N/A';
+            } else {
+                // Show business_parish for JNSBL products, normalized
+                const parishField = getCurrentParishField();
+                const rawParish = parishField === 'business_parish' && loan.business_parish
+                    ? loan.business_parish : loan.parish;
+                displayParish = normalizeParish(rawParish) || rawParish || 'N/A';
+            }
             document.getElementById('detailParish').textContent = displayParish;
-            document.getElementById('detailIndustry').textContent = loan.industry || 'N/A';
+
+            // Use Industry_cleaned for security data, industry for customer data
+            const industry = isSecurityData ? loan.Industry_cleaned : loan.industry;
+            document.getElementById('detailIndustry').textContent = industry || 'N/A';
             document.getElementById('detailDPD').textContent = loan.dpd;
         }
 
@@ -2045,6 +2137,9 @@
         // Filters
         // =====================================================================
         function applyFilters() {
+            // Update mortgage toggle visibility based on product selection
+            updateMortgageToggleVisibility();
+
             const status = document.getElementById('filterStatus').value;
 
             // Get selected loan products from checkboxes
@@ -2063,6 +2158,7 @@
             const useBusinessParish = checkedLoanProducts.size > 0 &&
                 [...checkedLoanProducts].every(p => isJNSBLProduct(p));
 
+            // Filter main LOAN_DATA for metrics (always uses customer address data)
             filteredData = LOAN_DATA.filter(d => {
                 // Exclude Staff Loan products entirely
                 if (isExcludedProduct(d.loan_type2)) return false;
@@ -2079,7 +2175,31 @@
                 return true;
             });
 
-            updateStats();
+            // Determine map display data
+            // When mortgage is selected and security address view is active, use security address data for map
+            const mortgageSelected = checkedLoanProducts.has('Mortgage Loans');
+            const onlyMortgageSelected = mortgageSelected && checkedLoanProducts.size === 1;
+
+            if (onlyMortgageSelected && mortgageAddressView === 'security') {
+                // Use security address data for map display only
+                mapDisplayData = LOAN_DATA_MORTGAGE_SECURITY_ADDRESS.filter(d => {
+                    // Status filter - derive from dpd (days past due)
+                    // Active = dpd <= 90, NonAccrual = dpd > 90
+                    if (status !== 'all') {
+                        const derivedStatus = d.dpd > 90 ? 'NonAccrual' : 'Active';
+                        if (derivedStatus !== status) return false;
+                    }
+                    // Parish filter using security_parish
+                    const normalizedParish = normalizeParish(d.security_parish);
+                    if (checkedParishes.size > 0 && !checkedParishes.has(normalizedParish)) return false;
+                    return true;
+                });
+            } else {
+                // Use filtered customer data for map
+                mapDisplayData = filteredData;
+            }
+
+            updateStats(); // Uses filteredData (customer data) - no double counting
             deckgl.setProps({ layers: getLayers() });
         }
 
@@ -2113,6 +2233,40 @@
             if (view === '3d') {
                 document.getElementById('loanDetail').classList.remove('visible');
             }
+        }
+
+        // =====================================================================
+        // Mortgage Address View Toggle
+        // =====================================================================
+        function updateMortgageToggleVisibility() {
+            const checkedLoanProducts = new Set();
+            document.querySelectorAll('#loanProductDropdown input[data-loanproduct]:checked').forEach(cb => {
+                checkedLoanProducts.add(cb.dataset.loanproduct);
+            });
+
+            const mortgageSelected = checkedLoanProducts.has('Mortgage Loans');
+            const toggleElement = document.getElementById('mortgageAddressToggle');
+
+            if (mortgageSelected) {
+                toggleElement.style.display = 'block';
+            } else {
+                toggleElement.style.display = 'none';
+                // Reset to customer address when mortgage is deselected
+                if (mortgageAddressView === 'security') {
+                    mortgageAddressView = 'customer';
+                    document.getElementById('btnCustomerAddress').classList.add('active');
+                    document.getElementById('btnSecurityAddress').classList.remove('active');
+                }
+            }
+        }
+
+        function setMortgageAddressView(view) {
+            mortgageAddressView = view;
+
+            document.getElementById('btnCustomerAddress').classList.toggle('active', view === 'customer');
+            document.getElementById('btnSecurityAddress').classList.toggle('active', view === 'security');
+
+            applyFilters();
         }
 
         // Initialize on load with retry logic
